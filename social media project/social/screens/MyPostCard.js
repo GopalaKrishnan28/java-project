@@ -8,9 +8,9 @@ import {
   FlatList,
   StyleSheet,
 } from "react-native";
-import CONFIG from './config'; 
+import CONFIG from './config';
 
-const PostCard = ({ post, navigation }) => {
+const MyPostCard = ({ post, navigation, onDeletePost }) => {
   const [liked, setLiked] = useState(post.isLikedByUser);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -27,11 +27,12 @@ const PostCard = ({ post, navigation }) => {
         body: `postId=${post.postid}`,
       });
       const result = await response.json();
-
+      
       if (result.success) {
         post.likes += liked ? -1 : 1;
         setLiked(!liked);
         // Increment or decrement the likes count
+        
       }
     } catch (error) {
       console.error("Error toggling like:", error);
@@ -64,9 +65,9 @@ const PostCard = ({ post, navigation }) => {
         body: `postId=${post.postid}&comment=${newComment}`,
       });
       const result = await response.json();
-
+      
       if (result.success) {
-        // Fetch the updated comments list after adding a new comment
+        // Fetch updated comments after adding a new one
         const commentsResponse = await fetch(`${CONFIG.BACKEND_URL}/getComments?postId=${post.postid}`);
         const updatedComments = await commentsResponse.json();
         setComments(updatedComments);
@@ -80,39 +81,54 @@ const PostCard = ({ post, navigation }) => {
     }
   };
 
+  const handleDeletePost = async () => {
+    try {
+      const response = await fetch(`${CONFIG.BACKEND_URL}/deletePost`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: `postId=${post.postid}`,
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        onDeletePost(post.postid);
+          // Remove post from parent component
+      }
+    } catch (error) {
+      console.error("Error deleting post:", error);
+    }
+  };
+
   const imageUri = `data:image/jpeg;base64,${post.image}`;
   const profileImageUri = `data:image/jpeg;base64,${post.profilepicture}`;
 
   return (
     <View style={styles.card}>
-      {/* Header Section with Profile Picture and Owner Name */}
-      <TouchableOpacity
-        style={styles.header}
-        onPress={() => navigation.navigate("Profile", { ownerid: post.ownerid })}
-      >
-        <Image source={{ uri: profileImageUri }} style={styles.profilePicture} />
-        <Text style={styles.ownerName}>{post.ownername}</Text>
-      </TouchableOpacity>
-
-      {/* Post Image */}
       <Image source={{ uri: imageUri }} style={styles.image} />
 
-      {/* Post Details */}
       <View style={styles.info}>
         <Text style={styles.description}>{post.description}</Text>
+
         <TouchableOpacity onPress={toggleLike} style={styles.likeButton}>
           <Text style={styles.likeText}>
             {liked ? "❤️" : "🤍"} {post.likes} Likes
           </Text>
         </TouchableOpacity>
+
         <TouchableOpacity onPress={fetchComments} style={styles.commentButton}>
           <Text style={styles.commentText}>
             💬 {commentCount} Comments
           </Text>
         </TouchableOpacity>
+
+        {/* Delete button */}
+        <TouchableOpacity onPress={handleDeletePost} style={styles.deleteButton}>
+          <Text style={styles.deleteText}>Delete</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Comments Section */}
       {showComments && (
         <View style={styles.commentsSection}>
           <FlatList
@@ -120,14 +136,7 @@ const PostCard = ({ post, navigation }) => {
             keyExtractor={(item, index) => index.toString()}
             renderItem={({ item }) => (
               <View style={styles.comment}>
-                <View style={styles.commentHeader}>
-                  <Image
-                    source={{ uri: `data:image/jpeg;base64,${item.profilepicture}` }}
-                    style={styles.commentProfilePicture}
-                  />
-                  <Text style={styles.commentUsername}>{item.username}</Text>
-                </View>
-                <Text style={styles.commentText}>{item.comment}</Text>
+                <Text>{item.comment}</Text>
               </View>
             )}
           />
@@ -158,23 +167,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-  },
-  profilePicture: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  ownerName: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
   image: {
     width: "100%",
     height: 200,
@@ -199,6 +191,17 @@ const styles = StyleSheet.create({
   commentText: {
     fontSize: 16,
   },
+  deleteButton: {
+    backgroundColor: "#e74c3c",
+    padding: 8,
+    borderRadius: 4,
+    marginTop: 10,
+    alignItems: "center",
+  },
+  deleteText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
   commentsSection: {
     padding: 16,
     borderTopWidth: 1,
@@ -206,25 +209,6 @@ const styles = StyleSheet.create({
   },
   comment: {
     paddingVertical: 4,
-  },
-  commentHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  commentProfilePicture: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-  },
-  commentUsername: {
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  commentText: {
-    fontSize: 14,
-    color: "#333",
   },
   input: {
     borderWidth: 1,
@@ -245,4 +229,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PostCard;
+export default MyPostCard;

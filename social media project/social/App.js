@@ -7,7 +7,8 @@ import RegisterScreen from './screens/Register';
 import HomeScreen from './screens/Home';
 import Addpost from './screens/AddPost';
 import Profile from "./screens/profile";
-
+import MyProfile from "./screens/Myprofile";
+import Search from "./screens/Search";
 const Stack = createStackNavigator();
 
 const App = () => {
@@ -19,6 +20,8 @@ const App = () => {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Addpost" component={Addpost} />
         <Stack.Screen name="Profile" component={Profile} />
+        <Stack.Screen name="Search" component={Search} />
+        <Stack.Screen name="MyProfile" component={MyProfile} />
       </Stack.Navigator>
     </NavigationContainer>
   );

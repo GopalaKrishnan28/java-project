@@ -134,6 +134,158 @@ Spark.get("/getPosts", (req, res) -> {
                 return gson.toJson(Map.of("error", "Internal Server Error: " + e.getMessage()));
             }
         });
+        Spark.get("/searchPosts", (req, res) -> {
+            String ownerId = req.session().attribute("ownerId");
+            if (ownerId == null) {
+                res.status(401);
+                return gson.toJson(Map.of("error", "User not logged in"));
+            }
+        
+            UUID userId = UUID.fromString(ownerId);
+            String searchQuery = req.queryParams("query");
+        
+            if (searchQuery == null || searchQuery.isEmpty()) {
+                res.status(400);
+                return gson.toJson(Map.of("error", "Search query cannot be empty"));
+            }
+        
+            try (CqlSession session = createSession()) {
+                List<Map<String, Object>> posts = new ArrayList<>();
+        
+                // Fetch all posts from the database
+                String query = "SELECT * FROM posts";
+                ResultSet resultSet = session.execute(query);
+        
+                // Iterate over all posts and filter them in Java
+                for (Row row : resultSet) {
+                    String description = row.getString("description");
+                    if (description != null && description.toLowerCase().contains(searchQuery.toLowerCase())) {
+                        Map<String, Object> post = new HashMap<>();
+                        post.put("postid", row.getUuid("postid").toString());
+                        post.put("ownerid", row.getString("ownerid"));
+                        post.put("image", row.getString("image"));
+                        post.put("description", row.getString("description"));
+                        post.put("likes", row.getList("likes", UUID.class).size());
+                        post.put("comments", row.getList("comments", UUID.class).size());
+        
+                        // Check if the post is liked by the current user
+                        List<UUID> likes = row.getList("likes", UUID.class);
+                        post.put("isLikedByUser", likes.contains(userId));
+        
+                        // Fetch ownername and profilepicture from users table
+                        UUID ownerUUID = UUID.fromString(row.getString("ownerid"));
+                        Row userRow = session.execute("SELECT username, profilepicture FROM users WHERE userid = ?", ownerUUID).one();
+                        if (userRow != null) {
+                            post.put("ownername", userRow.getString("username"));
+                            post.put("profilepicture", userRow.getString("profilepicture"));
+                        }
+        
+                        posts.add(post);
+                    }
+                }
+        
+                return gson.toJson(posts);
+            } catch (Exception e) {
+                e.printStackTrace();
+                res.status(500);
+                return gson.toJson(Map.of("error", "Internal Server Error: " + e.getMessage()));
+            }
+        });
+        
+        
+        Spark.get("/searchUsers", (req, res) -> {
+            String searchQuery = req.queryParams("query");
+            if (searchQuery == null || searchQuery.isEmpty()) {
+                res.status(400);
+                return gson.toJson(Map.of("error", "Search query is required"));
+            }
+        
+            try (CqlSession session = createSession()) {
+                // Fetch all users from the database
+                String query = "SELECT * FROM users";
+                ResultSet resultSet = session.execute(query);
+        
+                List<Map<String, Object>> users = new ArrayList<>();
+                // Iterate over all users and filter them in Java
+                for (Row row : resultSet) {
+                    String username = row.getString("username");
+                    if (username != null && username.toLowerCase().contains(searchQuery.toLowerCase())) {
+                        Map<String, Object> user = new HashMap<>();
+                        user.put("userid", row.getUuid("userid").toString());
+                        user.put("username", row.getString("username"));
+                        user.put("profilepicture", row.getString("profilepicture"));
+                        users.add(user);
+                    }
+                }
+        
+                return gson.toJson(users);
+            } catch (Exception e) {
+                e.printStackTrace();
+                res.status(500);
+                return gson.toJson(Map.of("error", "Error during search"));
+            }
+        });
+        
+        
+                
+        Spark.get("/getUserPosts", (req, res) -> {
+            String userIdParam = req.queryParams("userid");
+            String currentUserId = req.session().attribute("ownerId");
+        
+            if (currentUserId == null) {
+                res.status(401);
+                return gson.toJson(Map.of("error", "User not logged in"));
+            }
+        
+            if (userIdParam == null) {
+                res.status(400);
+                return gson.toJson(Map.of("error", "Missing userid parameter"));
+            }
+        
+            try (CqlSession session = createSession()) {
+                UUID requestedUserId = UUID.fromString(userIdParam);
+                UUID currentUserUUID = UUID.fromString(currentUserId);
+        
+                List<Map<String, Object>> userPosts = new ArrayList<>();
+                ResultSet resultSet = session.execute(
+                    "SELECT * FROM posts WHERE ownerid = ? ALLOW FILTERING", 
+                    userIdParam 
+                );
+        
+                for (Row row : resultSet) {
+                    Map<String, Object> post = new HashMap<>();
+                    post.put("postid", row.getUuid("postid").toString());
+                    post.put("ownerid", row.getString("ownerid"));
+                    post.put("image", row.getString("image"));
+                    post.put("description", row.getString("description"));
+                    post.put("likes", row.getList("likes", UUID.class).size());
+                    post.put("comments", row.getList("comments", UUID.class).size());
+        
+                    // Check if the post is liked by the current user
+                    List<UUID> likes = row.getList("likes", UUID.class);
+                    post.put("isLikedByUser", likes.contains(currentUserUUID));
+        
+                    // Fetch ownername and profilepicture from users table
+                    Row userRow = session.execute(
+                        "SELECT username, profilepicture FROM users WHERE userid = ?",
+                        requestedUserId
+                    ).one();
+                    if (userRow != null) {
+                        post.put("ownername", userRow.getString("username"));
+                        post.put("profilepicture", userRow.getString("profilepicture"));
+                    }
+        
+                    userPosts.add(post);
+                }
+        
+                return gson.toJson(userPosts);
+            } catch (Exception e) {
+                e.printStackTrace();
+                res.status(500);
+                return gson.toJson(Map.of("error", "Internal Server Error: " + e.getMessage()));
+            }
+        });
+        
         Spark.get("/getUserProfile", (req, res) -> {
             String userId = req.queryParams("userid");
             UUID ownerUUID = UUID.fromString(userId);
@@ -191,7 +343,7 @@ Spark.post("/toggleLike", (req, res) -> {
             likes.add(userId);
         }
         session.execute("UPDATE posts SET likes = ? WHERE postid = ?", likes, postId);
-        return gson.toJson(Map.of("message", "Like status updated"));
+        return gson.toJson(Map.of("success", true));
     }
 });
 
@@ -203,6 +355,7 @@ Spark.get("/getComments", (req, res) -> {
         if (postRow == null) return gson.toJson(Map.of("error", "Post not found"));
 
         List<UUID> commentIds = postRow.getList("comments", UUID.class);
+
         List<Map<String, Object>> comments = new ArrayList<>();
         for (UUID commentId : commentIds) {
             Row commentRow = session.execute("SELECT * FROM comments WHERE commentid = ? ALLOW FILTERING", commentId).one();
@@ -211,12 +364,22 @@ Spark.get("/getComments", (req, res) -> {
                 comment.put("commentid", commentRow.getUuid("commentid").toString());
                 comment.put("comment", commentRow.getString("comment"));
                 comment.put("ownerid", commentRow.getString("ownerid"));
+                
+                // Fetch the username and profile picture from the users table using ownerid
+                UUID ownerId = UUID.fromString(commentRow.getString("ownerid"));
+                Row userRow = session.execute("SELECT username, profilepicture FROM users WHERE userid = ?", ownerId).one();
+                if (userRow != null) {
+                    comment.put("username", userRow.getString("username"));
+                    comment.put("profilepicture", userRow.getString("profilepicture"));
+                }
+
                 comments.add(comment);
             }
         }
         return gson.toJson(comments);
     }
 });
+
 
 Spark.get("/getCurrentUserId", (req, res) -> {
     // Retrieve the current user's ID from the session
@@ -343,6 +506,42 @@ Spark.post("/removeFollow", (req, res) -> {
     }
 });
 
+Spark.post("/deletePost", (req, res) -> {
+    String ownerId = req.session().attribute("ownerId");
+    if (ownerId == null) {
+        res.status(401); // Unauthorized
+        return gson.toJson(Map.of("error", "User not logged in"));
+    }
+
+    UUID postId = UUID.fromString(req.queryParams("postId"));
+
+    try (CqlSession session = createSession()) {
+        // Step 1: Fetch the post to get associated comments
+        Row postRow = session.execute("SELECT comments FROM posts WHERE postid = ? ALLOW FILTERING", postId).one();
+        if (postRow == null) {
+            res.status(404); // Not Found
+            return gson.toJson(Map.of("error", "Post not found"));
+        }
+
+        // Step 2: Delete associated comments
+        List<UUID> commentIds = postRow.getList("comments", UUID.class);
+        if (commentIds != null && !commentIds.isEmpty()) {
+            for (UUID commentId : commentIds) {
+                // Delete each comment from the comments table
+                session.execute("DELETE FROM comments WHERE commentid = ?", commentId);
+            }
+        }
+
+        // Step 3: Delete the post
+        session.execute("DELETE FROM posts WHERE postid = ?", postId);
+
+        return gson.toJson(Map.of("success", true));
+    } catch (Exception e) {
+        e.printStackTrace();
+        res.status(500); // Internal Server Error
+        return gson.toJson(Map.of("error", "Error deleting post: " + e.getMessage()));
+    }
+});
 
 Spark.post("/addComment", (req, res) -> {
     String ownerId = req.session().attribute("ownerId");
@@ -363,7 +562,7 @@ Spark.post("/addComment", (req, res) -> {
         comments.add(commentId);
         session.execute("UPDATE posts SET comments = ? WHERE postid = ?", comments, postId);
 
-        return gson.toJson(Map.of("message", "Comment added successfully"));
+        return gson.toJson(Map.of("success",true));
     }
 });
 
